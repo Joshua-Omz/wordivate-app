@@ -77,12 +77,12 @@ class _ChatScreenState extends State<ChatScreen> {
     if (status != PermissionStatus.granted) {
       throw RecordingPermissionException('Microphone permission not granted');
     }
-    await _recorder.openAudioSession();
+    await _recorder.openRecorder();
   }
 
   @override
   void dispose() {
-    _recorder.closeAudioSession();
+    _recorder.closeRecorder();
     super.dispose();
   }
 
