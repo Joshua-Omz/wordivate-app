@@ -80,12 +80,6 @@ class _ChatScreenState extends State<ChatScreen> {
     await _recorder.openRecorder();
   }
 
-  @override
-  void dispose() {
-    _recorder.closeRecorder();
-    super.dispose();
-  }
-
   Future<void> _loadWords() async {
     final prefs = await SharedPreferences.getInstance();
     final List<String>? storedWords = prefs.getStringList('words');
@@ -103,78 +97,80 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _sendMessage() async {
-    if (_controller.text.isNotEmpty && !_controller.text.contains(' ')) {
-      String message = _controller.text;
-      if (!_words.any((entry) => entry.word == message)) {
-        String response = await _getResponse(message);
-        WordEntry newEntry = WordEntry(word: message, definition: response, dateAdded: DateTime.now());
+    print('Send button pressed');
+    String message = _controller.text.trim();
+    print('Message: $message');
+    
+    if (message.isNotEmpty) {
+      String response = await _getResponse(message);
+      WordEntry newEntry = WordEntry(word: message, definition: response, dateAdded: DateTime.now());
 
-        setState(() {
-          _messages.add('You: $message');
-          _messages.add('Wordivate: $response');
-          _words.add(newEntry);
-          _controller.clear();
-        });
+      setState(() {
+        _messages.add('You: $message');
+        _messages.add('Wordivate: $response');
+        _words.add(newEntry);
+        _controller.clear();
+      });
 
-        await _saveWords();
-      } else {
-        // Show an error message if the word is already in the list
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This word is already in the list.')),
-        );
-      }
+      await _saveWords();
     } else {
-      // Show an error message if the input contains more than one word
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter only one word.')),
+        const SnackBar(content: Text('Please enter a valid message.')),
       );
     }
   }
 
-  Future<String> _getResponse(String word) async {
-    final url = Uri.parse('https://api.dictionaryapi.dev/api/v2/entries/en/$word');
+  Future<String> _getResponse(String input) async {
+    final url = Uri.parse('https://api.gemini.com/v1/words/$input'); // Update with the correct Gemini API endpoint
     final response = await http.get(url);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
-      if (data.isNotEmpty && data[0]['meanings'].isNotEmpty) {
-        final definition = data[0]['meanings'][0]['definitions'][0]['definition'];
-        return definition;
+      if (input.split(' ').length > 1) {
+        // Handle sentence input
+        if (data.isNotEmpty && data['word'] != null) {
+          return data['word'];
+        } else {
+          return 'No word found for the given sentence.';
+        }
       } else {
-        return 'No definition found.';
+        // Handle single word input
+        if (data.isNotEmpty && data['meanings'].isNotEmpty) {
+          final definition = data['meanings'][0]['definitions'][0]['definition'];
+          return definition;
+        } else {
+          return 'No definition found.';
+        }
       }
     } else {
-      return 'Error fetching definition.';
+      return 'Error fetching response.';
     }
   }
 
-  void _startRecording() async {
-    try {
-      await _recorder.startRecorder(toFile: 'audio.aac');
-      setState(() {
-        _isRecording = true;
-      });
-    } catch (e) {
-      print('Error starting recorder: $e');
-    }
+  void _clearChat() {
+    setState(() {
+      _messages.clear();
+    });
   }
 
-  void _stopRecording() async {
-    try {
-      await _recorder.stopRecorder();
-      setState(() {
-        _isRecording = false;
-      });
-    } catch (e) {
-      print('Error stopping recorder: $e');
-    }
+  @override
+  void dispose() {
+    _controller.dispose();
+    _recorder.closeRecorder();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Wordivate'),
+        title: const Text('Chat'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: _clearChat,
+          ),
+        ],
       ),
       drawer: Drawer(
         child: Container(
@@ -254,32 +250,18 @@ class _ChatScreenState extends State<ChatScreen> {
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
-              children: <Widget>[
+              children: [
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    decoration: InputDecoration(
-                      hintText: 'Enter a word',
-                      hintStyle: const TextStyle(color: Colors.white54), // Set hint text color to white with some transparency
-                      filled: true,
-                      fillColor: const Color.fromARGB(255, 63, 65, 66), // Set the input field background color to match the AppBar
-                      border: const OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(12.0)),
-                      ),
+                    decoration: const InputDecoration(
+                      hintText: 'Enter your message',
                     ),
-                    style: const TextStyle(color: Colors.white), // Set input text color to white
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.send, color: Colors.white), // Set icon color to white
+                  icon: const Icon(Icons.send),
                   onPressed: _sendMessage,
-                ),
-                IconButton(
-                  icon: Icon(
-                    _isRecording ? Icons.stop : Icons.mic,
-                    color: Colors.white,
-                  ),
-                  onPressed: _isRecording ? _stopRecording : _startRecording,
                 ),
               ],
             ),
